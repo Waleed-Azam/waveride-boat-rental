@@ -1,0 +1,179 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  password      String?
+  role          String    @default("customer") // customer, owner, agency, admin
+  companyName   String?
+  phone         String?
+  avatar        String?
+  emailVerified DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  ownedBoats    Boat[]          @relation("BoatOwner")
+  bookings      Booking[]       @relation("CustomerBookings")
+  agencyBookings Booking[]      @relation("AgencyBookings")
+  accounts      Account[]
+  sessions      Session[]
+  syncLogs      SyncLog[]
+  reviews       Review[]
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Boat {
+  id              String   @id @default(cuid())
+  name            String
+  type            String   // yacht, sailboat, motorboat, catamaran, rib
+  make            String?
+  model           String?
+  year            Int?
+  length          Float    // in meters
+  capacity        Int      // max guests
+  cabins          Int?
+  bathrooms       Int?
+  description     String
+  location        String
+  marina          String?
+  pricePerDay     Float
+  currency        String   @default("EUR")
+  images          String   // JSON array of URLs
+  amenities       String   // JSON array
+  features        String?  // JSON
+  rating          Float    @default(0)
+  reviewCount     Int      @default(0)
+  status          String   @default("active") // active, inactive, maintenance
+  ownerId         String
+  owner           User     @relation("BoatOwner", fields: [ownerId], references: [id])
+  externalId      String?  // ID in external booking platform
+  lastSyncedAt    DateTime?
+  syncStatus      String   @default("synced") // synced, pending, error
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  bookings        Booking[]
+  availability    Availability[]
+  reviews         Review[]
+}
+
+model Availability {
+  id        String   @id @default(cuid())
+  boatId    String
+  boat      Boat     @relation(fields: [boatId], references: [id], onDelete: Cascade)
+  date      DateTime
+  status    String   @default("available") // available, booked, blocked, maintenance
+  bookingId String?
+  source    String   @default("local") // local, external
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([boatId, date])
+  @@index([boatId, date])
+}
+
+model Booking {
+  id              String   @id @default(cuid())
+  boatId          String
+  boat            Boat     @relation(fields: [boatId], references: [id])
+  customerId      String
+  customer        User     @relation("CustomerBookings", fields: [customerId], references: [id])
+  agencyId        String?
+  agency          User?    @relation("AgencyBookings", fields: [agencyId], references: [id])
+  startDate       DateTime
+  endDate         DateTime
+  guestCount      Int
+  status          String   @default("pending") // pending, confirmed, cancelled, completed
+  totalPrice      Float
+  currency        String   @default("EUR")
+  specialRequests String?
+  externalId      String?  // ID in external platform
+  syncStatus      String   @default("pending") // pending, synced, error
+  lastSyncedAt    DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  cancelledAt     DateTime?
+
+  payments        Payment[]
+}
+
+model Payment {
+  id            String   @id @default(cuid())
+  bookingId     String
+  booking       Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  amount        Float
+  currency      String   @default("EUR")
+  status        String   @default("pending") // pending, paid, refunded, failed
+  method        String?
+  transactionId String?
+  paidAt        DateTime?
+  createdAt     DateTime @default(now())
+}
+
+model Review {
+  id        String   @id @default(cuid())
+  boatId    String
+  boat      Boat     @relation(fields: [boatId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  rating    Int
+  comment   String?
+  createdAt DateTime @default(now())
+}
+
+model SyncLog {
+  id          String   @id @default(cuid())
+  userId      String?
+  user        User?    @relation(fields: [userId], references: [id])
+  entityType  String   // boat, booking, availability
+  entityId    String
+  externalId  String?
+  action      String   // create, update, cancel, push, pull
+  status      String   // success, failed, pending
+  direction   String   // outbound, inbound
+  payload     String?  // JSON
+  error       String?
+  createdAt   DateTime @default(now())
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
